@@ -75,5 +75,11 @@
       <pose>0 0 0 0 0 0</pose>
     </include>
 
+    <!-- ArUco marker 1 -->
+    <include>
+      <uri>model://aruco1</uri>
+      <pose>28 57.70 1 0 0 3.14</pose>
+    </include>
+
   </world>
 </sdf>
