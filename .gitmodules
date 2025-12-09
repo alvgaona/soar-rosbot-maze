@@ -1,0 +1,16 @@
+[submodule "rosbot_ros"]
+	path = rosbot_ros
+	url = https://github.com/husarion/rosbot_ros.git
+	branch = jazzy
+[submodule "husarion_components_description"]
+	path = husarion_components_description
+	url = https://github.com/husarion/husarion_components_description.git
+[submodule "husarion_controllers"]
+	path = husarion_controllers
+	url = https://github.com/husarion/husarion_controllers
+[submodule "husarion_gz_worlds"]
+	path = husarion_gz_worlds
+	url = https://github.com/husarion/husarion_gz_worlds
+[submodule "soar_ros"]
+	path = soar_ros
+	url = https://github.com/THA-Embedded-Systems-Lab/soar_ros.git
