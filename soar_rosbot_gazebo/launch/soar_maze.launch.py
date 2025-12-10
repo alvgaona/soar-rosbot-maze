@@ -21,7 +21,7 @@ def generate_launch_description():
 
     # Set GZ_SIM_RESOURCE_PATH to include our models directory
     models_path = PathJoinSubstitution(
-        [FindPackageShare("soar_rosbot_perception"), "models"]
+        [FindPackageShare("soar_rosbot_gazebo"), "models"]
     )
 
     set_gazebo_model_path = SetEnvironmentVariable(
@@ -35,7 +35,7 @@ def generate_launch_description():
 
     # Get path to custom maze world
     maze_world_path = PathJoinSubstitution(
-        [FindPackageShare("soar_rosbot_perception"), "worlds", "maze_world.sdf"]
+        [FindPackageShare("soar_rosbot_gazebo"), "worlds", "maze_world.sdf"]
     )
 
     # Use husarion_gz_worlds wrapper to launch Gazebo with custom maze world
