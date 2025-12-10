@@ -32,7 +32,7 @@ class WallDetector(Node):
         self.right_wall_pub = self.create_publisher(Bool, '/wall/right', 10)
         self.back_wall_pub = self.create_publisher(Bool, '/wall/back', 10)
 
-        self.get_logger().info(f'Wall detector initialized with threshold: {self.wall_threshold}m, cone: {self.cone_angle}°')
+        self.get_logger().info(f'Wall detector initialized with threshold: {self.wall_threshold} m, cone: {self.cone_angle}°')
 
     def normalize_angle(self, angle):
         """Normalize angle to [-pi, pi]"""

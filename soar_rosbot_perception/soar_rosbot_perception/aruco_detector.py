@@ -14,12 +14,13 @@ class ArucoDetector(Node):
         super().__init__('aruco_detector')
 
         # Parameters
-        self.declare_parameter('marker_size', 0.15)  # Marker size in meters (15cm default)
-        self.declare_parameter('aruco_dict', 'DICT_4X4_50')  # ArUco dictionary
-        self.declare_parameter('camera_fx', 615.0)  # Focal length x (estimated for OAK-D-PRO)
-        self.declare_parameter('camera_fy', 615.0)  # Focal length y
-        self.declare_parameter('camera_cx', 640.0)  # Principal point x (image center)
+        self.declare_parameter('marker_size', 0.75)  # Marker size in meters (75cm default)
+        self.declare_parameter('aruco_dict', 'DICT_6X6_1000')  # ArUco dictionary
+        self.declare_parameter('camera_fx', 1108.51)  # Focal length x
+        self.declare_parameter('camera_fy', 1108.51)  # Focal length y
+        self.declare_parameter('camera_cx', 640.0)  # Principal point x
         self.declare_parameter('camera_cy', 360.0)  # Principal point y
+        self.declare_parameter('image_topic', '/oak/rgb/color')  # Camera image topic
 
         self.marker_size = self.get_parameter('marker_size').value
         aruco_dict_name = self.get_parameter('aruco_dict').value
@@ -27,6 +28,7 @@ class ArucoDetector(Node):
         self.camera_fy = self.get_parameter('camera_fy').value
         self.camera_cx = self.get_parameter('camera_cx').value
         self.camera_cy = self.get_parameter('camera_cy').value
+        self.image_topic = self.get_parameter('image_topic').value
 
         # Camera matrix
         self.camera_matrix = np.array([
@@ -35,10 +37,11 @@ class ArucoDetector(Node):
             [0, 0, 1]
         ], dtype=np.float32)
 
-        # Assume no distortion for simplicity (can be updated with actual calibration)
+        # Assume no distorton as Gazebo OAK-D model has no distortion in Gazebo.
+        # Could be configured with CameraInfo in the future.
         self.dist_coeffs = np.zeros((5, 1), dtype=np.float32)
 
-        # Initialize ArUco detector
+        # ArUco possible dictionaries
         aruco_dict_map = {
             'DICT_4X4_50': cv2.aruco.DICT_4X4_50,
             'DICT_4X4_100': cv2.aruco.DICT_4X4_100,
@@ -53,22 +56,23 @@ class ArucoDetector(Node):
             'DICT_6X6_250': cv2.aruco.DICT_6X6_250,
             'DICT_6X6_1000': cv2.aruco.DICT_6X6_1000,
         }
-
+        
         if aruco_dict_name not in aruco_dict_map:
             self.get_logger().error(f'Unknown ArUco dictionary: {aruco_dict_name}')
-            aruco_dict_name = 'DICT_4X4_50'
+            aruco_dict_name = 'DICT_6X6_1000'
 
         self.aruco_dict = cv2.aruco.getPredefinedDictionary(aruco_dict_map[aruco_dict_name])
-        self.aruco_params = cv2.aruco.DetectorParameters()
-        self.aruco_detector = cv2.aruco.ArucoDetector(self.aruco_dict, self.aruco_params)
 
-        # CV Bridge
+        # Important: use DetectorParameters_create for Legacy API compatibility.
+        # Otherwise, there's a segmentation fault
+        self.aruco_params = cv2.aruco.DetectorParameters_create()
+        
         self.bridge = CvBridge()
 
         # Subscriber
         self.image_sub = self.create_subscription(
             Image,
-            '/rgb/color',
+            self.image_topic,
             self.image_callback,
             10
         )
@@ -128,9 +132,16 @@ class ArucoDetector(Node):
 
             # Convert to grayscale for detection
             gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+            
+            # Ensure contiguous array (important for some OpenCV versions)
+            gray = np.ascontiguousarray(gray)
 
-            # Detect ArUco markers
-            corners, ids, rejected = self.aruco_detector.detectMarkers(gray)
+            # Detect ArUco markers (Legacy API)
+            corners, ids, rejected = cv2.aruco.detectMarkers(
+                gray, 
+                self.aruco_dict, 
+                parameters=self.aruco_params
+            )
 
             # Check if any markers were detected
             if ids is not None and len(ids) > 0:
@@ -142,7 +153,7 @@ class ArucoDetector(Node):
 
                 if distance is not None:
                     self.distance_pub.publish(Float32(data=float(distance)))
-                    self.get_logger().info(
+                    self.get_logger().debug(
                         f'ArUco marker {ids[0][0]} detected at {distance:.3f}m'
                     )
                 else:
