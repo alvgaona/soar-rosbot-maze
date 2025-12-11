@@ -30,7 +30,6 @@ include_directories(
 
 # Create library
 add_library(${PROJECT_NAME}_lib
-  src/soar_maze_controller.cpp
   src/motion_controller.cpp
 )
 
@@ -53,7 +52,7 @@ ament_target_dependencies(soar_maze_controller
 
 # Create motion controller executable
 add_executable(motion_controller
-  src/motion_controller_main.cpp
+  src/motion_controller.cpp
 )
 
 target_link_libraries(motion_controller
@@ -66,7 +65,6 @@ ament_target_dependencies(motion_controller
 
 # Install targets
 install(TARGETS
-  soar_maze_controller
   motion_controller
   DESTINATION lib/${PROJECT_NAME}
 )
@@ -86,6 +84,11 @@ install(DIRECTORY include/
 # Install Soar rules directory
 install(DIRECTORY soar_rules/
   DESTINATION share/${PROJECT_NAME}/soar_rules
+)
+
+# Install launch files
+install(DIRECTORY launch/
+  DESTINATION share/${PROJECT_NAME}/launch
 )
 
 if(BUILD_TESTING)

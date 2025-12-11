@@ -1,0 +1,52 @@
+###############################################################################
+# Simple Test - Always Move Forward
+#
+# Behavior:
+# - Always move forward, no conditions
+###############################################################################
+
+# Initialize state
+sp {elaborate*state*name
+   (state <s> ^superstate nil)
+-->
+   (<s> ^name simple-test)
+}
+
+###############################################################################
+# Operators
+###############################################################################
+
+# Operator: move-forward
+# Always propose moving forward
+sp {propose*move-forward
+   (state <s> ^name simple-test)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name move-forward)
+}
+
+###############################################################################
+# Apply operators - Send commands to output-link
+###############################################################################
+
+sp {apply*move-forward
+   (state <s> ^operator <o>
+              ^io.output-link <ol>)
+   (<o> ^name move-forward)
+  -{(<ol> ^command.name move-forward)}  # Don't create if one already exists
+-->
+   (<ol> ^command <cmd>)
+   (<cmd> ^name move-forward)
+}
+
+###############################################################################
+# Remove completed commands
+###############################################################################
+
+sp {remove*complete-command
+   (state <s> ^io.output-link <ol>)
+   (<ol> ^command <cmd>)
+   (<cmd> ^status complete)
+-->
+   (<ol> ^command <cmd> -)
+}
