@@ -7,7 +7,7 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
-#include "geometry_msgs/msg/twist.hpp"
+#include "geometry_msgs/msg/twist_stamped.hpp"
 
 namespace soar_rosbot_controller
 {
@@ -44,7 +44,7 @@ private:
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr command_sub_;
 
   // Publisher for velocity commands
-  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr velocity_pub_;
+  rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr velocity_pub_;
 
   // Kinematics type
   bool is_holonomic_;
@@ -57,6 +57,9 @@ private:
   };
 
   std::unordered_map<std::string, VelocityCommand> command_map_;
+
+  // Track last command sent to avoid sending duplicates
+  std::string last_command_;
 };
 
 }  // namespace soar_rosbot_controller

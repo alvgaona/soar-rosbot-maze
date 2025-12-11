@@ -1,9 +1,7 @@
-###############################################################################
-# Main Soar Rules Entry Point
-###############################################################################
-
-# Source the maze solver rules
-source maze_solver.soar
+# Source our rules
+source move_forward.soar
 
 # Set Soar parameters
 watch 0
+max-elaborations 1000
+max-goal-depth 200
