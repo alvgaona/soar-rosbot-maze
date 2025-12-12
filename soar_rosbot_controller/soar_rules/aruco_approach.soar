@@ -1,8 +1,9 @@
 ###############################################################################
-# Simple Test - Always Move Forward
+# ArUco Approach
 #
 # Behavior:
-# - Always move forward, no conditions
+# - When ArUco tag is detected: move forward
+# - When ArUco tag is NOT detected: stop
 ###############################################################################
 
 ###############################################################################
@@ -20,7 +21,7 @@ sp {propose*init-agent
 sp {apply*init-agent
    (state <s> ^operator.name init-agent)
 -->
-   (<s> ^name simple-test)
+   (<s> ^name aruco-approach)
 }
 
 ###############################################################################
@@ -56,35 +57,76 @@ sp {prefer*others*over*wait
 # Operators
 ###############################################################################
 
-# Operator: move-forward
-# Always propose moving forward
+# Propose move-forward when ArUco is detected
 sp {propose*move-forward
-   (state <s> ^name simple-test)
+   (state <s> ^name aruco-approach
+              ^io.input-link.aruco.detected 1)
 -->
    (<s> ^operator <o> +)
    (<o> ^name move-forward)
 }
 
+# Propose stop when ArUco is NOT detected
+sp {propose*stop
+   (state <s> ^name aruco-approach
+              ^io.input-link.aruco.detected 0)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name stop)
+}
+
 ###############################################################################
 # Apply operators - Send commands to output-link
+# Only create command if no command with same name exists
 ###############################################################################
 
 sp {apply*move-forward
    (state <s> ^operator <o>
               ^io.output-link <ol>)
    (<o> ^name move-forward)
-  -{(<ol> ^command.name move-forward)}  # Don't create if one already exists
+  -(<ol> ^command.name move-forward)
 -->
    (<ol> ^command <cmd>)
    (<cmd> ^name move-forward)
 }
 
+sp {apply*stop
+   (state <s> ^operator <o>
+              ^io.output-link <ol>)
+   (<o> ^name stop)
+  -(<ol> ^command.name stop)
+-->
+   (<ol> ^command <cmd>)
+   (<cmd> ^name stop)
+}
+
 ###############################################################################
-# Remove completed commands
+# Remove commands - completed or wrong type for current operator
 ###############################################################################
 
-sp {remove*complete-command
-   (state <s> ^io.output-link <ol>)
+sp {apply*move-forward*remove-stop
+   (state <s> ^operator <o>
+              ^io.output-link <ol>)
+   (<o> ^name move-forward)
+   (<ol> ^command <cmd>)
+   (<cmd> ^name stop)
+-->
+   (<ol> ^command <cmd> -)
+}
+
+sp {apply*stop*remove-move-forward
+   (state <s> ^operator <o>
+              ^io.output-link <ol>)
+   (<o> ^name stop)
+   (<ol> ^command <cmd>)
+   (<cmd> ^name move-forward)
+-->
+   (<ol> ^command <cmd> -)
+}
+
+sp {apply*remove-completed-command
+   (state <s> ^operator <o>
+              ^io.output-link <ol>)
    (<ol> ^command <cmd>)
    (<cmd> ^status complete)
 -->

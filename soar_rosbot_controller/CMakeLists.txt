@@ -65,6 +65,7 @@ ament_target_dependencies(motion_controller
 
 # Install targets
 install(TARGETS
+  soar_maze_controller
   motion_controller
   DESTINATION lib/${PROJECT_NAME}
 )

@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <string>
+#include <optional>
 
 #include "soar_ros/Subscriber.hpp"
 #include "std_msgs/msg/bool.hpp"
@@ -19,15 +20,47 @@ public:
     rclcpp::Node::SharedPtr node,
     const std::string & topic)
   : Subscriber<std_msgs::msg::Bool>(agent, node, topic),
-    aruco_wme_(nullptr)
+    aruco_wme_(nullptr),
+    detected_wme_(nullptr)
   {}
+
+  // Override process_r2s to drain queue and use only the latest value
+  void process_r2s() override
+  {
+    // Drain the queue, keeping only the latest message
+    std::optional<std_msgs::msg::Bool> latest;
+    auto res = this->m_r2sQueue.tryPop();
+    while (res.has_value()) {
+      latest = res;
+      res = this->m_r2sQueue.tryPop();
+    }
+
+    if (!latest.has_value()) {
+      return;  // No messages
+    }
+
+    bool detected = latest.value().data;
+
+    sml::Identifier * il = this->m_pAgent->GetInputLink();
+
+    RCLCPP_INFO(this->m_node->get_logger(), "ArUcoDetectedSubscriber using latest detected=%d", detected ? 1 : 0);
+
+    // Remove old WMEs if they exist
+    if (aruco_wme_ != nullptr) {
+      aruco_wme_->DestroyWME();
+      aruco_wme_ = nullptr;
+      detected_wme_ = nullptr;
+    }
+
+    // Create new WMEs
+    aruco_wme_ = il->CreateIdWME("aruco");
+    detected_wme_ = aruco_wme_->CreateIntWME("detected", detected ? 1 : 0);
+  }
 
   void parse(std_msgs::msg::Bool msg) override
   {
-    sml::Identifier * il = this->m_pAgent->GetInputLink();
-
-    aruco_wme_ = il->CreateIdWME("aruco");
-    aruco_wme_->CreateIntWME("detected", msg.data ? 1 : 0);
+    // Not used - we override process_r2s directly
+    (void)msg;
   }
 
 private:
@@ -42,17 +75,30 @@ public:
     sml::Agent * agent,
     rclcpp::Node::SharedPtr node,
     const std::string & topic)
-  : Subscriber<std_msgs::msg::Float32>(agent, node, topic) {}
+  : Subscriber<std_msgs::msg::Float32>(agent, node, topic),
+    aruco_wme_(nullptr),
+    distance_wme_(nullptr)
+  {}
 
   void parse(std_msgs::msg::Float32 msg) override
   {
     sml::Identifier * il = this->m_pAgent->GetInputLink();
+
+    // Remove old WMEs if they exist
+    if (aruco_wme_ != nullptr) {
+      aruco_wme_->DestroyWME();
+      aruco_wme_ = nullptr;
+      distance_wme_ = nullptr;
+    }
+
+    // Create new WMEs
     aruco_wme_ = il->CreateIdWME("aruco");
-    aruco_wme_->CreateFloatWME("distance", msg.data);
+    distance_wme_ = aruco_wme_->CreateFloatWME("distance", msg.data);
   }
 
 private:
   sml::Identifier* aruco_wme_;
+  sml::WMElement* distance_wme_;
 };
 
 class WallSubscriber : public soar_ros::Subscriber<std_msgs::msg::Bool>
