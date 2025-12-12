@@ -88,15 +88,7 @@ void MotionController::commandCallback(const std_msgs::msg::String::SharedPtr ms
 {
   const std::string & command = msg->data;
 
-  RCLCPP_INFO(this->get_logger(), "Received command: %s", command.c_str());
-
-  // Only publish if command changed
-  if (command == last_command_) {
-    RCLCPP_DEBUG(
-      this->get_logger(),
-      "Command unchanged (%s), skipping publish", command.c_str());
-    return;
-  }
+  RCLCPP_DEBUG(this->get_logger(), "Received command: %s", command.c_str());
 
   // Convert command to velocity
   geometry_msgs::msg::Twist velocity = commandToVelocity(command);
@@ -110,13 +102,14 @@ void MotionController::commandCallback(const std_msgs::msg::String::SharedPtr ms
   // Publish velocity
   velocity_pub_->publish(velocity_stamped);
 
-  // Update last command
-  last_command_ = command;
-
-  RCLCPP_INFO(
-    this->get_logger(),
-    "Published velocity: linear.x=%.2f, linear.y=%.2f, angular.z=%.2f",
-    velocity.linear.x, velocity.linear.y, velocity.angular.z);
+  // Log only when command changes
+  if (command != last_command_) {
+    RCLCPP_INFO(
+      this->get_logger(),
+      "Command changed to: %s - Publishing velocity: linear.x=%.2f, linear.y=%.2f, angular.z=%.2f",
+      command.c_str(), velocity.linear.x, velocity.linear.y, velocity.angular.z);
+    last_command_ = command;
+  }
 }
 
 geometry_msgs::msg::Twist MotionController::commandToVelocity(const std::string & command)

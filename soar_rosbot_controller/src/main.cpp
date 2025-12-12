@@ -66,11 +66,12 @@ int main(int argc, char ** argv)
     "/aruco/detected");
   node->addSubscriber<std_msgs::msg::Bool>(aruco_detected_sub);
 
-  auto aruco_distance_sub = std::make_shared<soar_rosbot_controller::ArUcoDistanceSubscriber>(
-    node->getAgent(),
-    node,
-    "/aruco/distance");
-  node->addSubscriber<std_msgs::msg::Float32>(aruco_distance_sub);
+  // TODO: Distance subscriber creates separate ^aruco WME, conflicting with detected subscriber
+  // auto aruco_distance_sub = std::make_shared<soar_rosbot_controller::ArUcoDistanceSubscriber>(
+  //   node->getAgent(),
+  //   node,
+  //   "/aruco/distance");
+  // node->addSubscriber<std_msgs::msg::Float32>(aruco_distance_sub);
 
   // Start Soar kernel thread
   node->startThread();

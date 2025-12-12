@@ -1,7 +1,7 @@
 # Source our rules
-source move_forward.soar
+source aruco_approach.soar
 
 # Set Soar parameters
-watch 0
+watch 1
 max-elaborations 1000
 max-goal-depth 200
