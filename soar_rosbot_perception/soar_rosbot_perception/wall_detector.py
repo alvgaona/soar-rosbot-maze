@@ -37,10 +37,10 @@ class WallDetector(Node):
 
     def get_cone_readings(self, scan_msg, center_angle_deg):
         """
-        Get all range readings within a cone centered at center_angle_deg
+        Get all range readings within a cone centered at `center_angle_deg`.
 
         Args:
-            scan_msg: LaserScan message
+            scan_msg: `LaserScan` message
             center_angle_deg: Center angle in degrees (0=front, 90=left, -90=right, 180=back)
 
         Returns:
@@ -60,7 +60,7 @@ class WallDetector(Node):
 
             # Check if this reading is within the cone
             if angle_diff <= half_cone:
-                # Only include valid readings (not inf, not nan, within min/max range)
+                # Only include valid readings (not inf, not NaN, within min/max range)
                 if (range_val >= scan_msg.range_min and
                     range_val <= scan_msg.range_max and
                     not math.isnan(range_val) and
@@ -77,18 +77,20 @@ class WallDetector(Node):
             readings: List of range values
 
         Returns:
-            True if wall detected, False otherwise
+            Tuple of (wall_detected: bool, distance: float)
+            - wall_detected: True if wall detected, False otherwise
+            - distance: Distance to wall in meters (0.0 if no wall detected)
         """
         if not readings:
-            return False
+            return (False, 0.0)
 
         # Use minimum distance in the cone
         min_distance = min(readings)
-        
+
         # Detect wall if threshold is crossed and enough readings are present
         wall_detected = (min_distance < self.wall_threshold and len(readings) > 3)
 
-        return wall_detected
+        return (wall_detected, min_distance if wall_detected else 0.0)
 
     def scan_callback(self, msg):
         """Process laser scan and detect walls in all four directions"""
@@ -98,23 +100,27 @@ class WallDetector(Node):
         left_readings = self.get_cone_readings(msg, -90.0)    # Left (Robot) is -90° (LiDAR)
         right_readings = self.get_cone_readings(msg, 90.0)    # Right (Robot) is 90° (LiDAR)
 
-        # Detect walls
-        front_wall = self.detect_wall(front_readings)
-        left_wall = self.detect_wall(left_readings)
-        right_wall = self.detect_wall(right_readings)
+        front_wall, front_distance = self.detect_wall(front_readings)
+        left_wall, left_distance = self.detect_wall(left_readings)
+        right_wall, right_distance = self.detect_wall(right_readings)
 
         # Publish unified wall detection message
-        msg = WallDetection()
-        msg.front = front_wall
-        msg.left = left_wall
-        msg.right = right_wall
-        msg.back = False  # Not currently detecting back wall
-        self.wall_pub.publish(msg)
+        detection_msg = WallDetection()
+        detection_msg.front = front_wall
+        detection_msg.left = left_wall
+        detection_msg.right = right_wall
+        detection_msg.back = False  # Not currently detecting back wall
+        detection_msg.front_distance = front_distance
+        detection_msg.left_distance = left_distance
+        detection_msg.right_distance = right_distance
+        detection_msg.back_distance = 0.0
+        self.wall_pub.publish(detection_msg)
 
         # Log for debugging (can be commented out later)
         self.get_logger().debug(
-            f'Walls - Front: {front_wall}, Left: {left_wall}, '
-            f'Right: {right_wall}'
+            f'Walls - Front: {front_wall} ({front_distance:.2f}m), '
+            f'Left: {left_wall} ({left_distance:.2f}m), '
+            f'Right: {right_wall} ({right_distance:.2f}m)'
         )
 
 

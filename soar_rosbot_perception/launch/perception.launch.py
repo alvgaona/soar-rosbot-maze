@@ -20,7 +20,7 @@ def generate_launch_description():
         "cone_angle", default_value="10.0", description="Cone angle for wall detection"
     )
     declare_wall_threshold_arg = DeclareLaunchArgument(
-        "wall_threshold", default_value="2.15", description="Wall detection distance threshold in"
+        "wall_threshold", default_value="2.3", description="Wall detection distance threshold in"
     )
 
     declare_marker_size_arg = DeclareLaunchArgument(
