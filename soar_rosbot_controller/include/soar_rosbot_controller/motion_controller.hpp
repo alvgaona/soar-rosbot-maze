@@ -7,6 +7,7 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
+#include "std_msgs/msg/float64.hpp"
 #include "geometry_msgs/msg/twist_stamped.hpp"
 
 namespace soar_rosbot_controller
@@ -40,11 +41,55 @@ private:
    */
   void initializeCommandMappings();
 
+  /**
+   * @brief Callback for yaw updates from yaw_observer
+   */
+  void yawCallback(const std_msgs::msg::Float64::SharedPtr msg);
+
+  /**
+   * @brief Start a rotation to reach target yaw
+   */
+  void startRotation(double target_yaw, double angular_velocity);
+
+  /**
+   * @brief Stop current rotation
+   */
+  void stopRotation();
+
+  /**
+   * @brief Normalize angle to [-π, π]
+   */
+  double normalizeAngle(double angle);
+
+  /**
+   * @brief Publish velocity command
+   */
+  void publishVelocity(double linear_x, double linear_y, double angular_z);
+
   // Subscriber for commands
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr command_sub_;
 
+  // Subscriber for yaw from yaw_observer
+  rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr yaw_sub_;
+
   // Publisher for velocity commands
   rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr velocity_pub_;
+
+  // Track last command sent to avoid sending duplicates
+  std::string last_command_;
+
+  // Current yaw from yaw_observer
+  double current_yaw_;
+  bool yaw_received_;
+
+  // Rotation state
+  struct RotationState {
+    bool active;
+    double target_yaw;
+    double angular_velocity;
+    double tolerance;  // radians (~2.9 degrees)
+  };
+  RotationState rotation_state_;
 
   // Kinematics type
   bool is_holonomic_;
@@ -57,9 +102,6 @@ private:
   };
 
   std::unordered_map<std::string, VelocityCommand> command_map_;
-
-  // Track last command sent to avoid sending duplicates
-  std::string last_command_;
 };
 
 }  // namespace soar_rosbot_controller
