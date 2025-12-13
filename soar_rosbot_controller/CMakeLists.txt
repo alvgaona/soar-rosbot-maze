@@ -15,6 +15,9 @@ find_package(geometry_msgs REQUIRED)
 find_package(soar_ros REQUIRED)
 find_package(soar_rosbot_msgs REQUIRED)
 find_package(ament_index_cpp REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 
 set(THIS_PACKAGE_INCLUDE_DEPENDS
   rclcpp
@@ -23,6 +26,9 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   soar_ros
   soar_rosbot_msgs
   ament_index_cpp
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
 )
 
 # Include directories
@@ -65,10 +71,20 @@ ament_target_dependencies(motion_controller
   ${THIS_PACKAGE_INCLUDE_DEPENDS}
 )
 
+# Create yaw observer executable
+add_executable(yaw_observer
+  src/yaw_observer.cpp
+)
+
+ament_target_dependencies(yaw_observer
+  ${THIS_PACKAGE_INCLUDE_DEPENDS}
+)
+
 # Install targets
 install(TARGETS
   soar_maze_controller
   motion_controller
+  yaw_observer
   DESTINATION lib/${PROJECT_NAME}
 )
 
