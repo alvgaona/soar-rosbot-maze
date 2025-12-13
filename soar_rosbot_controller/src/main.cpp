@@ -7,6 +7,7 @@
 #include "soar_ros/SoarRunner.hpp"
 #include "std_msgs/msg/string.hpp"
 #include "soar_rosbot_msgs/msg/aruco_detection.hpp"
+#include "soar_rosbot_msgs/msg/wall_detection.hpp"
 #include "soar_rosbot_controller/perception_subscribers.hpp"
 #include "soar_rosbot_controller/command_publisher.hpp"
 
@@ -64,6 +65,13 @@ int main(int argc, char ** argv)
     node,
     "/aruco/detection");
   node->addSubscriber<soar_rosbot_msgs::msg::ArucoDetection>(aruco_sub);
+
+  // Create Wall subscriber
+  auto wall_sub = std::make_shared<soar_rosbot_controller::WallSubscriber>(
+    node->getAgent(),
+    node,
+    "/wall/detection");
+  node->addSubscriber<soar_rosbot_msgs::msg::WallDetection>(wall_sub);
 
   // Start Soar kernel thread
   node->startThread();
