@@ -1,5 +1,5 @@
 # Source our rules
-source aruco_approach.soar
+source target_distance_approach.soar
 
 # Set Soar parameters
 watch 1

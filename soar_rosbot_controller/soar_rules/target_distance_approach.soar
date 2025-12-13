@@ -63,8 +63,7 @@ sp {propose*move-forward
    (state <s> ^name target-distance-approach
               ^io.input-link.aruco <aruco>)
    (<aruco> ^detected 1
-            ^distance <dist>)
-   (<dist> > 3.0)
+            ^distance {<dist> > 3.0})
 -->
    (<s> ^operator <o> +)
    (<o> ^name move-forward)
@@ -75,8 +74,7 @@ sp {propose*stop*target-reached
    (state <s> ^name target-distance-approach
               ^io.input-link.aruco <aruco>)
    (<aruco> ^detected 1
-            ^distance <dist>)
-   (<dist> <= 3.0)
+            ^distance {<dist> <= 3.0})
 -->
    (<s> ^operator <o> +)
    (<o> ^name stop)
