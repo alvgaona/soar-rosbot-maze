@@ -1,0 +1,226 @@
+###############################################################################
+# Right-Hand Wall Following
+#
+# Strategy:
+# - Preferences: move-forward > rotate-right > rotate-left
+# - Follow the right wall to navigate through the maze
+#
+# Operator Proposals:
+# - move-forward: when front wall = 0 (no front wall)
+# - rotate-right: when right wall = 0 OR stuck (all three walls = 1)
+# - rotate-left: when left wall = 0 OR stuck (all three walls = 1)
+###############################################################################
+
+###############################################################################
+# Initialize state
+###############################################################################
+
+sp {propose*init-agent
+   (state <s> ^superstate nil
+             -^name)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name init-agent)
+}
+
+sp {apply*init-agent
+   (state <s> ^operator.name init-agent)
+-->
+   (<s> ^name right-hand-wall-following)
+}
+
+###############################################################################
+# Wait operator - handles state no-change impasse
+###############################################################################
+
+sp {propose*wait
+   (state <s> ^attribute state
+              ^choices none
+             -^operator.name wait)
+-->
+   (<s> ^operator <o>)
+   (<o> ^name wait)
+}
+
+sp {apply*wait
+   (state <s> ^operator <o>)
+   (<o> ^name wait)
+-->
+   (<o> ^random elaboration)
+}
+
+sp {prefer*others*over*wait
+   (state <s> ^operator <o1> +
+              ^operator <o2> +)
+   (<o1> ^name <> wait)
+   (<o2> ^name wait)
+-->
+   (<s> ^operator <o1> > <o2>)
+}
+
+###############################################################################
+# Operator Proposals
+###############################################################################
+
+# Propose move-forward when NO front wall
+sp {propose*move-forward
+   (state <s> ^name right-hand-wall-following
+              ^io.input-link.walls.front 0)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name move-forward)
+}
+
+# Propose rotate-right when NO right wall (to follow the right wall)
+sp {propose*rotate-right*no-right-wall
+   (state <s> ^name right-hand-wall-following
+              ^io.input-link.walls.right 0)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name rotate-right)
+}
+
+# Propose rotate-right when STUCK (all three walls detected)
+sp {propose*rotate-right*stuck
+   (state <s> ^name right-hand-wall-following
+              ^io.input-link.walls <walls>)
+   (<walls> ^front 1
+            ^left 1
+            ^right 1)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name rotate-right)
+}
+
+# Propose rotate-left when NO left wall
+sp {propose*rotate-left*no-left-wall
+   (state <s> ^name right-hand-wall-following
+              ^io.input-link.walls.left 0)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name rotate-left)
+}
+
+# Propose rotate-left when STUCK (all three walls detected)
+sp {propose*rotate-left*stuck
+   (state <s> ^name right-hand-wall-following
+              ^io.input-link.walls <walls>)
+   (<walls> ^front 1
+            ^left 1
+            ^right 1)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name rotate-left)
+}
+
+###############################################################################
+# Operator Preferences
+# Preferences: move-forward > rotate-right > rotate-left
+###############################################################################
+
+# Prefer move-forward over rotate-right
+sp {prefer*move-forward*over*rotate-right
+   (state <s> ^operator <o1> +
+              ^operator <o2> +)
+   (<o1> ^name move-forward)
+   (<o2> ^name rotate-right)
+-->
+   (<s> ^operator <o1> > <o2>)
+}
+
+# Prefer move-forward over rotate-left
+sp {prefer*move-forward*over*rotate-left
+   (state <s> ^operator <o1> +
+              ^operator <o2> +)
+   (<o1> ^name move-forward)
+   (<o2> ^name rotate-left)
+-->
+   (<s> ^operator <o1> > <o2>)
+}
+
+# Prefer rotate-right over rotate-left
+sp {prefer*rotate-right*over*rotate-left
+   (state <s> ^operator <o1> +
+              ^operator <o2> +)
+   (<o1> ^name rotate-right)
+   (<o2> ^name rotate-left)
+-->
+   (<s> ^operator <o1> > <o2>)
+}
+
+###############################################################################
+# Apply Operators - Send commands to output-link
+###############################################################################
+
+sp {apply*move-forward
+   (state <s> ^operator <o>
+              ^io.output-link <ol>)
+   (<o> ^name move-forward)
+  -(<ol> ^command.name move-forward)
+-->
+   (<ol> ^command <cmd>)
+   (<cmd> ^name move-forward)
+}
+
+sp {apply*rotate-right
+   (state <s> ^operator <o>
+              ^io.output-link <ol>)
+   (<o> ^name rotate-right)
+  -(<ol> ^command.name rotate-right)
+-->
+   (<ol> ^command <cmd>)
+   (<cmd> ^name rotate-right)
+}
+
+sp {apply*rotate-left
+   (state <s> ^operator <o>
+              ^io.output-link <ol>)
+   (<o> ^name rotate-left)
+  -(<ol> ^command.name rotate-left)
+-->
+   (<ol> ^command <cmd>)
+   (<cmd> ^name rotate-left)
+}
+
+###############################################################################
+# Remove Commands - Clean up conflicting commands
+###############################################################################
+
+sp {apply*move-forward*remove-rotations
+   (state <s> ^operator <o>
+              ^io.output-link <ol>)
+   (<o> ^name move-forward)
+   (<ol> ^command <cmd>)
+   (<cmd> ^name << rotate-right rotate-left >>)
+-->
+   (<ol> ^command <cmd> -)
+}
+
+sp {apply*rotate-right*remove-others
+   (state <s> ^operator <o>
+              ^io.output-link <ol>)
+   (<o> ^name rotate-right)
+   (<ol> ^command <cmd>)
+   (<cmd> ^name << move-forward rotate-left >>)
+-->
+   (<ol> ^command <cmd> -)
+}
+
+sp {apply*rotate-left*remove-others
+   (state <s> ^operator <o>
+              ^io.output-link <ol>)
+   (<o> ^name rotate-left)
+   (<ol> ^command <cmd>)
+   (<cmd> ^name << move-forward rotate-right >>)
+-->
+   (<ol> ^command <cmd> -)
+}
+
+sp {apply*remove-completed-command
+   (state <s> ^operator <o>
+              ^io.output-link <ol>)
+   (<ol> ^command <cmd>)
+   (<cmd> ^status complete)
+-->
+   (<ol> ^command <cmd> -)
+}
