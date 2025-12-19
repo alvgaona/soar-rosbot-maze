@@ -12,6 +12,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(soar_ros REQUIRED)
 find_package(soar_rosbot_msgs REQUIRED)
 find_package(ament_index_cpp REQUIRED)
@@ -23,6 +24,7 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   rclcpp
   std_msgs
   geometry_msgs
+  sensor_msgs
   soar_ros
   soar_rosbot_msgs
   ament_index_cpp

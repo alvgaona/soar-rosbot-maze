@@ -8,6 +8,7 @@
 #include "std_msgs/msg/string.hpp"
 #include "std_msgs/msg/float64.hpp"
 #include "geometry_msgs/msg/twist_stamped.hpp"
+#include "sensor_msgs/msg/joint_state.hpp"
 #include "soar_rosbot_msgs/msg/wall_detection.hpp"
 
 namespace soar_rosbot_controller
@@ -52,6 +53,11 @@ private:
   void wallCallback(const soar_rosbot_msgs::msg::WallDetection::SharedPtr msg);
 
   /**
+   * @brief Callback for joint state updates (actual wheel velocities)
+   */
+  void jointStateCallback(const sensor_msgs::msg::JointState::SharedPtr msg);
+
+  /**
    * @brief Start a rotation to reach target yaw
    */
   void startRotation(double target_yaw, double angular_velocity);
@@ -80,6 +86,9 @@ private:
   // Subscriber for wall detection
   rclcpp::Subscription<soar_rosbot_msgs::msg::WallDetection>::SharedPtr wall_sub_;
 
+  // Subscriber for joint states (actual wheel velocities)
+  rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
+
   // Publisher for velocity commands
   rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr velocity_pub_;
 
@@ -90,10 +99,14 @@ private:
   double current_yaw_;
   bool yaw_received_;
 
-  // Safety: Front wall distance
+  // Safety: Front wall detection
+  bool front_wall_detected_;
   double front_wall_distance_;
   bool wall_data_received_;
-  static constexpr double SAFETY_DISTANCE_THRESHOLD = 2.0;  // meters
+
+  // Robot motion state from wheel encoders
+  bool is_moving_;
+  static constexpr double WHEEL_VELOCITY_THRESHOLD = 1e-6;  // rad/s
 
   // Rotation state
   struct RotationState {

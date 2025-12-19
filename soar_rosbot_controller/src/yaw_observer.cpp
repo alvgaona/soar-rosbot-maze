@@ -16,7 +16,7 @@ YawObserver::YawObserver()
   yaw_pub_ = this->create_publisher<std_msgs::msg::Float64>("/rosbot/yaw", 10);
 
   timer_ = this->create_wall_timer(
-    std::chrono::milliseconds(20),
+    std::chrono::milliseconds(50),  // 20 Hz - reduced from 50 Hz for better performance
     [this]() { publishYaw(); });
 
   RCLCPP_INFO(this->get_logger(), "Yaw observer initialized");

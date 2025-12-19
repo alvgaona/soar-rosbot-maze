@@ -9,17 +9,16 @@ namespace soar_rosbot_controller
 
 MotionController::MotionController()
 : Node("motion_controller"), last_command_(""), current_yaw_(0.0), yaw_received_(false),
-  front_wall_distance_(0.0), wall_data_received_(false)
+  front_wall_detected_(false), front_wall_distance_(0.0), wall_data_received_(false),
+  is_moving_(false)
 {
   // Declare and get kinematics type parameter
   this->declare_parameter("holonomic", true);
   is_holonomic_ = this->get_parameter("holonomic").as_bool();
 
   // Declare velocity parameters
-  this->declare_parameter("linear_velocity_forward", 1.0);
-  this->declare_parameter("linear_velocity_approach", 0.15);
+  this->declare_parameter("linear_velocity_forward", 2.0);
   this->declare_parameter("angular_velocity_turn", 0.5);
-  this->declare_parameter("angular_velocity_turn_around", 1.0);
 
   // Initialize rotation state
   rotation_state_.active = false;
@@ -45,6 +44,11 @@ MotionController::MotionController()
     "/wall/detection", 10,
     [this](const soar_rosbot_msgs::msg::WallDetection::SharedPtr msg) { wallCallback(msg); });
 
+  // Create subscriber for joint states (actual wheel velocities)
+  joint_state_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(
+    "/joint_states", 10,
+    [this](const sensor_msgs::msg::JointState::SharedPtr msg) { jointStateCallback(msg); });
+
   // Create publisher for velocity commands
   velocity_pub_ = this->create_publisher<geometry_msgs::msg::TwistStamped>("/cmd_vel", 10);
 
@@ -55,7 +59,8 @@ MotionController::MotionController()
   RCLCPP_INFO(this->get_logger(), "Listening for commands on /soar/command");
   RCLCPP_INFO(this->get_logger(), "Subscribing to /rosbot/yaw for rotation control");
   RCLCPP_INFO(this->get_logger(), "Subscribing to /wall/detection for safety monitoring");
-  RCLCPP_INFO(this->get_logger(), "Safety policy: Stop if front wall < %.2fm", SAFETY_DISTANCE_THRESHOLD);
+  RCLCPP_INFO(this->get_logger(), "Subscribing to /joint_states for actual velocity tracking");
+  RCLCPP_INFO(this->get_logger(), "Safety policy: Stop move-forward if front wall detected");
   RCLCPP_INFO(this->get_logger(), "Publishing velocities to /cmd_vel");
 }
 
@@ -115,6 +120,12 @@ void MotionController::commandCallback(const std_msgs::msg::String::SharedPtr ms
       RCLCPP_DEBUG(this->get_logger(), "Cannot rotate-right: yaw not available yet");
       return;
     }
+
+    if (is_moving_) {
+      RCLCPP_DEBUG(this->get_logger(), "Cannot rotate-right: robot still moving");
+      return;
+    }
+
     double target_yaw = normalizeAngle(current_yaw_ - M_PI / 2.0);  // -90 degrees
     double angular_vel = -this->get_parameter("angular_velocity_turn").as_double();
     startRotation(target_yaw, angular_vel);
@@ -129,6 +140,12 @@ void MotionController::commandCallback(const std_msgs::msg::String::SharedPtr ms
       RCLCPP_WARN(this->get_logger(), "Cannot rotate-left: yaw not available yet");
       return;
     }
+
+    if (is_moving_) {
+      RCLCPP_DEBUG(this->get_logger(), "Cannot rotate-left: robot still moving");
+      return;
+    }
+
     double target_yaw = normalizeAngle(current_yaw_ + M_PI / 2.0);  // +90 degrees
     double angular_vel = this->get_parameter("angular_velocity_turn").as_double();
     startRotation(target_yaw, angular_vel);
@@ -138,38 +155,36 @@ void MotionController::commandCallback(const std_msgs::msg::String::SharedPtr ms
     return;
   }
 
-  // SAFETY POLICY: Stop if trying to move forward and front wall is too close
-  if (command == "move-forward" && wall_data_received_) {
-    if (front_wall_distance_ > 0.0 && front_wall_distance_ < SAFETY_DISTANCE_THRESHOLD) {
-      RCLCPP_WARN(
-        this->get_logger(),
-        "SAFETY: Rejecting move-forward command - front wall too close (%.2fm < %.2fm threshold)",
-        front_wall_distance_, SAFETY_DISTANCE_THRESHOLD);
-      // Send stop command instead
-      geometry_msgs::msg::TwistStamped stop_cmd;
-      stop_cmd.header.stamp = this->now();
-      stop_cmd.header.frame_id = "base_link";
-      stop_cmd.twist.linear.x = 0.0;
-      stop_cmd.twist.linear.y = 0.0;
-      stop_cmd.twist.angular.z = 0.0;
-      velocity_pub_->publish(stop_cmd);
-      return;
-    }
+  // SAFETY POLICY: Stop if trying to move forward and front wall is detected
+  if (command == "move-forward" && wall_data_received_ && front_wall_detected_) {
+    RCLCPP_WARN(
+      this->get_logger(),
+      "SAFETY: Rejecting move-forward command - front wall detected at %.2fm",
+      front_wall_distance_);
+    // Send stop command instead
+    geometry_msgs::msg::TwistStamped stop_cmd;
+    stop_cmd.header.stamp = this->now();
+    stop_cmd.header.frame_id = "base_link";
+    stop_cmd.twist.linear.x = 0.0;
+    stop_cmd.twist.linear.y = 0.0;
+    stop_cmd.twist.angular.z = 0.0;
+    velocity_pub_->publish(stop_cmd);
+    return;
   }
 
-  // Convert command to velocity
-  geometry_msgs::msg::Twist velocity = commandToVelocity(command);
-
-  // Create TwistStamped message with timestamp
-  geometry_msgs::msg::TwistStamped velocity_stamped;
-  velocity_stamped.header.stamp = this->now();
-  velocity_stamped.header.frame_id = "base_link";
-  velocity_stamped.twist = velocity;
-
-  velocity_pub_->publish(velocity_stamped);
-
-  // Log only when command changes
+  // Only publish if command has changed (avoid redundant velocity commands)
   if (command != last_command_) {
+    // Convert command to velocity
+    geometry_msgs::msg::Twist velocity = commandToVelocity(command);
+
+    // Create TwistStamped message with timestamp
+    geometry_msgs::msg::TwistStamped velocity_stamped;
+    velocity_stamped.header.stamp = this->now();
+    velocity_stamped.header.frame_id = "base_link";
+    velocity_stamped.twist = velocity;
+
+    velocity_pub_->publish(velocity_stamped);
+
     RCLCPP_DEBUG(
       this->get_logger(),
       "Command changed to: %s - Publishing velocity: linear.x=%.2f, linear.y=%.2f, angular.z=%.2f",
@@ -213,19 +228,53 @@ void MotionController::yawCallback(const std_msgs::msg::Float64::SharedPtr msg)
     if (std::abs(error) < rotation_state_.tolerance) {
       stopRotation();
       RCLCPP_INFO(this->get_logger(), "Rotation complete! Final yaw: %.2f", current_yaw_);
-    } else {
-      // Continue rotating
-      publishVelocity(0.0, 0.0, rotation_state_.angular_velocity);
     }
+    // Note: No need to continuously publish velocity during rotation
+    // The initial velocity command from startRotation() is sufficient
   }
 }
 
 void MotionController::wallCallback(const soar_rosbot_msgs::msg::WallDetection::SharedPtr msg)
 {
+  front_wall_detected_ = msg->front;
   front_wall_distance_ = msg->front_distance;
   wall_data_received_ = true;
 
-  RCLCPP_DEBUG(this->get_logger(), "Wall detection: front_distance=%.2fm", front_wall_distance_);
+  // RCLCPP_DEBUG(this->get_logger(),
+  //              "Wall detection: front=%d, front_distance=%.2fm",
+  //              front_wall_detected_ ? 1 : 0, front_wall_distance_);
+}
+
+void MotionController::jointStateCallback(const sensor_msgs::msg::JointState::SharedPtr msg) {
+  // Check if robot is moving by looking at wheel velocities
+  // All velocities should be below the threshold to consider the robot stopped
+
+  if (msg->name.size() < 4 || msg->velocity.size() < 4) {
+    RCLCPP_WARN(this->get_logger(),
+      "JointState message does not contain enough wheel data");
+    return;
+  }
+
+  auto fl_wheel_vel = msg->velocity[0]; // front-left
+  auto fr_wheel_vel = msg->velocity[1]; // front-right
+  auto rl_wheel_vel = msg->velocity[2]; // rear-left
+  auto rr_wheel_vel = msg->velocity[3]; // rear-right
+
+  bool was_moving = is_moving_;
+
+  if (fl_wheel_vel > WHEEL_VELOCITY_THRESHOLD || fl_wheel_vel < -WHEEL_VELOCITY_THRESHOLD ||
+      fr_wheel_vel > WHEEL_VELOCITY_THRESHOLD || fr_wheel_vel < -WHEEL_VELOCITY_THRESHOLD ||
+      rl_wheel_vel > WHEEL_VELOCITY_THRESHOLD || rl_wheel_vel < -WHEEL_VELOCITY_THRESHOLD ||
+      rr_wheel_vel > WHEEL_VELOCITY_THRESHOLD || rr_wheel_vel < -WHEEL_VELOCITY_THRESHOLD) {
+    is_moving_ = true;
+  } else {
+    is_moving_ = false;
+  }
+
+  // Only log when movement state changes to reduce overhead
+  if (is_moving_ != was_moving) {
+    RCLCPP_DEBUG(this->get_logger(), "Joint states: is_moving=%d", is_moving_);
+  }
 }
 
 void MotionController::startRotation(double target_yaw, double angular_velocity)
@@ -233,6 +282,9 @@ void MotionController::startRotation(double target_yaw, double angular_velocity)
   rotation_state_.active = true;
   rotation_state_.target_yaw = target_yaw;
   rotation_state_.angular_velocity = angular_velocity;
+
+  // Publish initial rotation velocity command
+  publishVelocity(0.0, 0.0, angular_velocity);
 }
 
 void MotionController::stopRotation()
