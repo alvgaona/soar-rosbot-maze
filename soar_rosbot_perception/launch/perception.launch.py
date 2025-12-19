@@ -21,7 +21,7 @@ def generate_launch_description():
         "cone_angle", default_value="5.0", description="Cone angle for wall detection (degrees)"
     )
     declare_front_wall_threshold_arg = DeclareLaunchArgument(
-        "front_wall_threshold", default_value="2.5", description="Front wall detection distance threshold (meters)"
+        "front_wall_threshold", default_value="2.75", description="Front wall detection distance threshold (meters)"
     )
     declare_side_wall_threshold_arg = DeclareLaunchArgument(
         "side_wall_threshold", default_value="4.0", description="Side wall detection distance threshold (meters)"
