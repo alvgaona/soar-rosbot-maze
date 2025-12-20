@@ -20,11 +20,25 @@ MotionController::MotionController()
   this->declare_parameter("linear_velocity_forward", 2.0);
   this->declare_parameter("angular_velocity_turn", 0.5);
 
+  // Declare PID parameters for rotation control
+  this->declare_parameter("rotation_pid_kp", 2.0);
+  this->declare_parameter("rotation_pid_ki", 0.0);
+  this->declare_parameter("rotation_pid_kd", 0.5);
+  this->declare_parameter("rotation_tolerance_deg", 1.0);
+
+  pid_kp_ = this->get_parameter("rotation_pid_kp").as_double();
+  pid_ki_ = this->get_parameter("rotation_pid_ki").as_double();
+  pid_kd_ = this->get_parameter("rotation_pid_kd").as_double();
+  double tolerance_deg = this->get_parameter("rotation_tolerance_deg").as_double();
+
   // Initialize rotation state
   rotation_state_.active = false;
   rotation_state_.target_yaw = 0.0;
-  rotation_state_.angular_velocity = 0.0;
-  rotation_state_.tolerance = 0.05;  // ~2.9 degrees
+  rotation_state_.max_angular_velocity = 0.0;
+  rotation_state_.tolerance = tolerance_deg * M_PI / 180.0;  // Convert to radians
+  rotation_state_.integral = 0.0;
+  rotation_state_.previous_error = 0.0;
+  rotation_state_.last_update_time = this->now();
 
   // Initialize command mappings
   initializeCommandMappings();
@@ -62,6 +76,8 @@ MotionController::MotionController()
   RCLCPP_INFO(this->get_logger(), "Subscribing to /joint_states for actual velocity tracking");
   RCLCPP_INFO(this->get_logger(), "Safety policy: Stop move-forward if front wall detected");
   RCLCPP_INFO(this->get_logger(), "Publishing velocities to /cmd_vel");
+  RCLCPP_INFO(this->get_logger(), "PID rotation control: Kp=%.2f, Ki=%.2f, Kd=%.2f, tolerance=%.1f°",
+              pid_kp_, pid_ki_, pid_kd_, tolerance_deg);
 }
 
 MotionController::~MotionController()
@@ -127,8 +143,8 @@ void MotionController::commandCallback(const std_msgs::msg::String::SharedPtr ms
     }
 
     double target_yaw = normalizeAngle(current_yaw_ - M_PI / 2.0);  // -90 degrees
-    double angular_vel = -this->get_parameter("angular_velocity_turn").as_double();
-    startRotation(target_yaw, angular_vel);
+    double max_angular_vel = this->get_parameter("angular_velocity_turn").as_double();
+    startRotation(target_yaw, max_angular_vel);  // PID determines sign
     RCLCPP_INFO(this->get_logger(), "Starting rotate-right: current=%.2f, target=%.2f",
                 current_yaw_, target_yaw);
     last_command_ = command;
@@ -222,15 +238,60 @@ void MotionController::yawCallback(const std_msgs::msg::Float64::SharedPtr msg)
 
   // Check if we're in an active rotation
   if (rotation_state_.active) {
+    // Calculate error with normalization for shortest path
     double error = normalizeAngle(rotation_state_.target_yaw - current_yaw_);
 
-    // Check if we've reached the target
-    if (std::abs(error) < rotation_state_.tolerance) {
+    // Check if we've reached the target AND robot has stopped moving (settled)
+    if (std::abs(error) < rotation_state_.tolerance && !is_moving_) {
       stopRotation();
       RCLCPP_INFO(this->get_logger(), "Rotation complete! Final yaw: %.2f", current_yaw_);
+      return;
     }
-    // Note: No need to continuously publish velocity during rotation
-    // The initial velocity command from startRotation() is sufficient
+
+    // Calculate time delta
+    rclcpp::Time current_time = this->now();
+    double dt = (current_time - rotation_state_.last_update_time).seconds();
+
+    if (dt > 0.0) {
+      // PID calculation
+      rotation_state_.integral += error * dt;
+
+      // Clamp integral to prevent windup (max contribution = 0.5 rad/s)
+      double max_integral = 0.5 / std::max(pid_ki_, 0.01);
+      rotation_state_.integral = std::clamp(rotation_state_.integral, -max_integral, max_integral);
+
+      double derivative = (error - rotation_state_.previous_error) / dt;
+
+      // Clamp derivative to prevent spikes when error changes sign rapidly
+      derivative = std::clamp(derivative, -10.0, 10.0);  // Limit to ±10 rad/s²
+
+      // Compute PID output
+      double pid_output = pid_kp_ * error +
+                         pid_ki_ * rotation_state_.integral +
+                         pid_kd_ * derivative;
+
+      // Clamp to maximum angular velocity
+      double angular_velocity = std::clamp(pid_output,
+                                          -rotation_state_.max_angular_velocity,
+                                           rotation_state_.max_angular_velocity);
+
+      // Apply deadband: if velocity is too small, set to zero to prevent drift
+      if (std::abs(angular_velocity) < 0.01) {  // 0.01 rad/s deadband (~0.57 deg/s)
+        angular_velocity = 0.0;
+      }
+
+      // Publish velocity command
+      publishVelocity(0.0, 0.0, angular_velocity);
+
+      // Update PID state
+      rotation_state_.previous_error = error;
+      rotation_state_.last_update_time = current_time;
+
+      RCLCPP_DEBUG(this->get_logger(),
+                   "PID: error=%.3f, P=%.3f, I=%.3f, D=%.3f, output=%.3f, vel=%.3f",
+                   error, pid_kp_*error, pid_ki_*rotation_state_.integral,
+                   pid_kd_*derivative, pid_output, angular_velocity);
+    }
   }
 }
 
@@ -239,6 +300,26 @@ void MotionController::wallCallback(const soar_rosbot_msgs::msg::WallDetection::
   front_wall_detected_ = msg->front;
   front_wall_distance_ = msg->front_distance;
   wall_data_received_ = true;
+
+  // ACTIVE SAFETY: If front wall detected while executing move-forward, stop immediately
+  if (front_wall_detected_ && last_command_ == "move-forward") {
+    RCLCPP_WARN(
+      this->get_logger(),
+      "SAFETY: Front wall detected at %.2fm while moving forward - stopping immediately!",
+      front_wall_distance_);
+
+    // Send stop command
+    geometry_msgs::msg::TwistStamped stop_cmd;
+    stop_cmd.header.stamp = this->now();
+    stop_cmd.header.frame_id = "base_link";
+    stop_cmd.twist.linear.x = 0.0;
+    stop_cmd.twist.linear.y = 0.0;
+    stop_cmd.twist.angular.z = 0.0;
+    velocity_pub_->publish(stop_cmd);
+
+    // Update last_command to stop to prevent move-forward from resuming
+    last_command_ = "stop";
+  }
 
   // RCLCPP_DEBUG(this->get_logger(),
   //              "Wall detection: front=%d, front_distance=%.2fm",
@@ -277,20 +358,30 @@ void MotionController::jointStateCallback(const sensor_msgs::msg::JointState::Sh
   }
 }
 
-void MotionController::startRotation(double target_yaw, double angular_velocity)
+void MotionController::startRotation(double target_yaw, double max_angular_velocity)
 {
   rotation_state_.active = true;
   rotation_state_.target_yaw = target_yaw;
-  rotation_state_.angular_velocity = angular_velocity;
+  rotation_state_.max_angular_velocity = max_angular_velocity;
 
-  // Publish initial rotation velocity command
-  publishVelocity(0.0, 0.0, angular_velocity);
+  // Reset PID state for new rotation
+  rotation_state_.integral = 0.0;
+  rotation_state_.previous_error = 0.0;
+  rotation_state_.last_update_time = this->now();
+
+  // PID will compute and publish velocity in yawCallback
 }
 
 void MotionController::stopRotation()
 {
   if (rotation_state_.active) {
     rotation_state_.active = false;
+
+    // Reset PID state
+    rotation_state_.integral = 0.0;
+    rotation_state_.previous_error = 0.0;
+
+    // Stop rotation
     publishVelocity(0.0, 0.0, 0.0);
   }
 }
