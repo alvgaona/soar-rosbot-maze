@@ -1,5 +1,7 @@
 # Soar ROSbot Maze
 
+<img width="2990" height="1626" alt="2025-12-20 at 01 13 17@2x" src="https://github.com/user-attachments/assets/e6d4a9f3-2677-428a-89de-85df35acdaf2" />
+
 ## Prerequisites
 
 - Ubuntu 24.04 (noble)
