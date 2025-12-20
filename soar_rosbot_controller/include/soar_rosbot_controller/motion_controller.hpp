@@ -58,9 +58,9 @@ private:
   void jointStateCallback(const sensor_msgs::msg::JointState::SharedPtr msg);
 
   /**
-   * @brief Start a rotation to reach target yaw
+   * @brief Start a rotation to reach target yaw with PID control
    */
-  void startRotation(double target_yaw, double angular_velocity);
+  void startRotation(double target_yaw, double max_angular_velocity);
 
   /**
    * @brief Stop current rotation
@@ -108,14 +108,23 @@ private:
   bool is_moving_;
   static constexpr double WHEEL_VELOCITY_THRESHOLD = 1e-6;  // rad/s
 
-  // Rotation state
+  // Rotation state with PID control
   struct RotationState {
     bool active;
     double target_yaw;
-    double angular_velocity;
-    double tolerance;  // radians (~2.9 degrees)
+    double max_angular_velocity;  // Maximum angular velocity limit
+    double tolerance;  // radians
+    // PID state
+    double integral;
+    double previous_error;
+    rclcpp::Time last_update_time;
   };
   RotationState rotation_state_;
+
+  // PID gains for rotation control
+  double pid_kp_;
+  double pid_ki_;
+  double pid_kd_;
 
   // Kinematics type
   bool is_holonomic_;
