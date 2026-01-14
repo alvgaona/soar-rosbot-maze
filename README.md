@@ -31,7 +31,7 @@ git clone --recurse-submodules https://github.com/alvgaona/soar-rosbot-maze.git
 Once all submodules are cloned, you'll need to build the packages with `colcon`.
 
 ```sh
-colcon build --event-hander console_direct+
+colcon build --event-handler console_direct+
 ```
 
 The above command will look for all ROS 2 packages in the repository and build it. 
@@ -69,7 +69,3 @@ Lastly, just need to pull up the Soar controller with:
 ```sh
 ros2 launch soar_rosbot_controller controller.launch.py
 ```
-
-## Common Issues
-
-WIP
