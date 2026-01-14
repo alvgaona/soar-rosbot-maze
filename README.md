@@ -4,6 +4,9 @@
 
 ## Prerequisites
 
+> ![IMPORTANT]
+> The `soar_ros` package needs this [fix](https://github.com/THA-Embedded-Systems-Lab/soar_ros/pull/4) in order to properly work.
+
 - Ubuntu 24.04 (noble)
 - ROS 2 Jazzy
 - Gazebo Harmonic
